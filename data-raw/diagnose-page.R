@@ -1,72 +1,61 @@
-# Diagnostic helper: captures the live ShareSansar page from a GitHub runner and
-# prints the structures the scraper depends on. Run by diagnose-page.yml only.
+# Diagnostic helper: probes how ShareSansar's date filter is actually driven.
+# Run by diagnose-page.yml only.
 
 dir.create("diagnose", showWarnings = FALSE)
-url <- "https://www.sharesansar.com/today-share-price"
-handle <- curl::new_handle()
-curl::handle_setopt(
-  handle, useragent = "lcNEPSE diagnostic (+https://github.com/koshishjlc72/lcNEPSE)",
-  followlocation = TRUE, timeout = 60
-)
-res <- curl::curl_fetch_memory(url, handle = handle)
-cat("HTTP", res$status_code, "bytes", length(res$content), "\n")
-writeBin(res$content, "diagnose/today.html")
+base <- "https://www.sharesansar.com/today-share-price"
 
-doc <- xml2::read_html(res$content)
-text <- xml2::xml_text(doc)
-
-cat("\n=== 'As of' occurrences ===\n")
-hits <- gregexpr("As of", text, ignore.case = TRUE)[[1]]
-if (hits[[1L]] != -1L) {
-  for (i in utils::head(hits, 12L)) {
-    cat("[", i, "]", gsub("\\s+", " ", substr(text, max(1L, i - 140L), i + 140L)), "\n---\n", sep = "")
+fetch <- function(label, url, post = FALSE, fields = NULL, ajax = FALSE) {
+  handle <- curl::new_handle()
+  curl::handle_setopt(
+    handle,
+    useragent = "lcNEPSE diagnostic (+https://github.com/koshishjlc72/lcNEPSE)",
+    followlocation = TRUE, timeout = 60
+  )
+  if (ajax) curl::handle_setopt(handle, httpheader = "X-Requested-With: XMLHttpRequest")
+  if (post) {
+    body <- paste(
+      paste0(curl::curl_escape(names(fields)), "=", curl::curl_escape(unlist(fields))),
+      collapse = "&"
+    )
+    curl::handle_setopt(handle, post = TRUE, postfields = body)
   }
-} else {
-  cat("none found in document text\n")
+  res <- try(curl::curl_fetch_memory(url, handle = handle), silent = TRUE)
+  cat("\n###", label, "\n")
+  if (inherits(res, "try-error")) {
+    cat("error:", conditionMessage(attr(res, "condition")), "\n")
+    return(invisible(NULL))
+  }
+  cat("status:", res$status_code, "bytes:", length(res$content), "\n")
+  txt <- rawToChar(res$content)
+  Encoding(txt) <- "UTF-8"
+  writeLines(substr(txt, 1, 300), stdout())
+  doc <- try(xml2::read_html(res$content), silent = TRUE)
+  if (inherits(doc, "try-error")) return(invisible(NULL))
+  table <- NULL
+  tables <- xml2::xml_find_all(doc, "//table")
+  for (t in tables) {
+    h <- xml2::xml_find_all(t, ".//th")
+    if ("Symbol" %in% xml2::xml_text(h) && "Open" %in% xml2::xml_text(h)) {
+      table <- t
+      break
+    }
+  }
+  if (is.null(table)) {
+    cat("price table: none\n")
+    return(invisible(NULL))
+  }
+  headers <- xml2::xml_find_all(table, ".//th")
+  cat("price table rows:", length(xml2::xml_find_all(table, ".//tbody/tr")), "\n")
+  hit <- xml2::xml_find_first(table, "preceding::*[contains(., 'As of')][1]")
+  cat("as of:", if (inherits(hit, "xml_missing")) "none" else gsub("\\s+", " ", xml2::xml_text(hit)), "\n")
+  invisible(NULL)
 }
 
-tables <- xml2::xml_find_all(doc, "//table")
-cat("\n=== tables ===\n")
-cat("count:", length(tables), "\n")
-target <- NULL
-for (i in seq_along(tables)) {
-  th <- xml2::xml_text(xml2::xml_find_all(tables[[i]], ".//th"))
-  cat(i, ":", paste(utils::head(th, 6), collapse = " | "), "\n")
-  if (is.null(target) && "Symbol" %in% th && "Open" %in% th) target <- tables[[i]]
-}
-if (is.null(target)) {
-  cat("price table not found\n")
-  quit(status = 1)
-}
+fetch("GET no date", base)
+fetch("GET ?date=2026-10-29", paste0(base, "?date=2026-10-29"))
+fetch("GET ?date=2026-10-30", paste0(base, "?date=2026-10-30"))
+fetch("GET /2026-10-29", paste0(base, "/2026-10-29"))
+fetch("POST plain", base, post = TRUE, fields = list(date = "2026-10-29", sector = ""))
+fetch("POST ajax", base, post = TRUE, fields = list(date = "2026-10-29", sector = ""), ajax = TRUE)
 
-cat("\n=== preceding elements of the price table ===\n")
-nodes <- xml2::xml_find_all(target, "preceding::*")
-for (node in utils::tail(nodes, 10L)) {
-  cat(
-    "name:", xml2::xml_name(node),
-    "| class:", xml2::xml_attr(node, "class"),
-    "| text:", gsub("\\s+", " ", substr(xml2::xml_text(node), 1L, 120L)), "\n"
-  )
-}
-
-cat("\n=== parent structure ===\n")
-parent <- xml2::xml_parent(target)
-cat(as.character(parent)[1L], "\n")
-
-cat("\n=== ancestors ===\n")
-anc <- xml2::xml_find_all(target, "ancestor::*")
-for (node in utils::tail(anc, 6L)) {
-  cat(
-    "name:", xml2::xml_name(node),
-    "| class:", xml2::xml_attr(node, "class"),
-    "| id:", xml2::xml_attr(node, "id"), "\n"
-  )
-}
-
-cat("\n=== sibling text before table ===\n")
-sib <- xml2::xml_find_all(target, "preceding-sibling::*")
-for (node in utils::tail(sib, 5L)) {
-  cat("name:", xml2::xml_name(node), "| text:",
-      gsub("\\s+", " ", substr(xml2::xml_text(node), 1L, 200L)), "\n")
-}
 cat("\nDIAGNOSE_OK\n")
