@@ -118,7 +118,8 @@ nepse_scrape_prices <- function(date = NULL) {
     }
     as_of <- date
   }
-  if (!is.null(date) && !identical(as_of, date)) {
+  if (!is.null(date) &&
+      !identical(format(as_of, "%Y-%m-%d"), format(date, "%Y-%m-%d"))) {
     nepse_stop(
       "ShareSansar returned data for %s when %s was requested.",
       format(as_of, "%Y-%m-%d"), format(date, "%Y-%m-%d")
