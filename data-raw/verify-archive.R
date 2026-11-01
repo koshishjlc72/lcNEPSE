@@ -42,7 +42,14 @@ if (!length(dates)) fail("No trading dates in the archive.")
 if (anyNA(prices$trading_date)) fail("Prices contain missing trading dates.")
 if (any(!prices$trading_date %in% dates)) fail("Prices contain dates absent from the manifest.")
 if (anyDuplicated(paste(prices$trading_date, prices$symbol))) fail("Duplicate symbol-date rows.")
-if (any(prices$close <= 0, na.rm = TRUE)) fail("Non-positive closing prices found.")
+if (any(prices$close < 0, na.rm = TRUE)) fail("Negative closing prices found.")
+# Old sessions can publish 0 for an instrument that did not trade. The latest
+# session must be fully priced, so a zero there is a real failure.
+latest_day <- max(prices$trading_date)
+if (any(prices$close[prices$trading_date == latest_day] <= 0, na.rm = TRUE)) {
+  fail("Non-positive closing price in the latest session (%s).", format(latest_day))
+}
+if (any(prices$high < prices$low, na.rm = TRUE)) fail("A high price is below its low.")
 
 indices <- nepse_indices()
 invisible(nepse_validate(indices))
