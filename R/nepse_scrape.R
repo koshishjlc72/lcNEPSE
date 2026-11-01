@@ -4,6 +4,12 @@ nepse_prices_url <- function() {
   "https://www.sharesansar.com/today-share-price"
 }
 
+# The date filter is JavaScript-driven: the page posts the filter form here and
+# replaces #todayshareprice_data with the returned HTML fragment.
+nepse_ajax_prices_url <- function() {
+  "https://www.sharesansar.com/ajaxtodayshareprice"
+}
+
 nepse_indices_url <- function() {
   "https://www.sharesansar.com/"
 }
@@ -121,16 +127,14 @@ nepse_scrape_prices <- function(date = NULL) {
 }
 
 nepse_date_filter_fields <- function(doc, date, url) {
-  form <- xml2::xml_find_first(doc, "//form[.//input[@id='fromdate']]")
+  form <- xml2::xml_find_first(doc, "//form[@id='frm_todayshareprice']")
+  if (inherits(form, "xml_missing")) {
+    form <- xml2::xml_find_first(doc, "//form[.//input[@id='fromdate']]")
+  }
   if (inherits(form, "xml_missing")) {
     nepse_stop(
       "ShareSansar has no date filter form; historical backfill is unavailable. The page layout may have changed."
     )
-  }
-  action <- xml2::xml_attr(form, "action")
-  if (is.na(action) || !nzchar(action)) action <- url
-  if (grepl("^/", action)) {
-    action <- paste0("https://www.sharesansar.com", action)
   }
   inputs <- xml2::xml_find_all(form, ".//input[@name]")
   fields <- list()
@@ -151,17 +155,29 @@ nepse_date_filter_fields <- function(doc, date, url) {
     fields[[name]] <- if (is.na(value)) "" else value
   }
   date_input <- xml2::xml_find_first(form, ".//input[@id='fromdate']")
+  if (inherits(date_input, "xml_missing")) {
+    nepse_stop("ShareSansar's date filter has no date input; cannot request a historical date.")
+  }
   date_name <- xml2::xml_attr(date_input, "name")
   if (is.na(date_name) || !nzchar(date_name)) {
     nepse_stop("ShareSansar's date filter has no input name; cannot request a historical date.")
   }
-  fields[[date_name]] <- format(date, "%m/%d/%Y")
-  list(action = action, fields = fields)
+  format_hint <- xml2::xml_attr(date_input, "data-date-format")
+  pattern <- if (!is.na(format_hint) && grepl("MM/DD/YYYY", format_hint)) {
+    "%m/%d/%Y"
+  } else {
+    "%Y-%m-%d"
+  }
+  fields[[date_name]] <- format(date, pattern)
+  list(action = nepse_ajax_prices_url(), fields = fields)
 }
 
 nepse_post_date_filter <- function(doc, url, date, handle) {
   spec <- nepse_date_filter_fields(doc, date, url)
-  res <- nepse_http_post_form(spec$action, spec$fields, handle = handle, referer = url)
+  res <- nepse_http_post_form(
+    spec$action, spec$fields, handle = handle, referer = url,
+    headers = c("X-Requested-With: XMLHttpRequest", "Accept: text/html, */*")
+  )
   txt <- rawToChar(res$content)
   Encoding(txt) <- "UTF-8"
   list(text = txt, status = res$status_code)

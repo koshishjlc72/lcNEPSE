@@ -71,7 +71,7 @@ nepse_http_get_file <- function(url, dest, attempts = 3L) {
 }
 
 nepse_http_post_form <- function(url, fields, handle, referer = NULL,
-                                 attempts = 2L) {
+                                 headers = NULL, attempts = 2L) {
   body <- paste(
     paste0(
       curl::curl_escape(names(fields)),
@@ -81,7 +81,11 @@ nepse_http_post_form <- function(url, fields, handle, referer = NULL,
     collapse = "&"
   )
   if (!is.null(referer)) curl::handle_setopt(handle, referer = referer)
+  if (!is.null(headers)) curl::handle_setopt(handle, httpheader = headers)
   curl::handle_setopt(handle, post = TRUE, postfields = body)
-  on.exit(curl::handle_setopt(handle, post = FALSE, postfields = NULL), add = TRUE)
+  on.exit({
+    curl::handle_setopt(handle, post = FALSE, postfields = NULL)
+    if (!is.null(headers)) curl::handle_setopt(handle, httpheader = NULL)
+  }, add = TRUE)
   nepse_http_get_raw(url, handle = handle, attempts = attempts)
 }

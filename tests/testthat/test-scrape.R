@@ -88,11 +88,28 @@ test_that("a ragged row is a hard failure", {
 test_that("the date filter form is read for historical requests", {
   doc <- xml2::read_html(fixture_path("prices-page.html"))
   spec <- nepse_date_filter_fields(doc, as.Date("2026-10-29"), nepse_prices_url())
-  expect_equal(spec$action, "https://www.sharesansar.com/today-share-price")
+  expect_equal(spec$action, nepse_ajax_prices_url())
   expect_equal(spec$fields[["_token"]], "token-abc123")
   expect_equal(spec$fields[["sector"]], "")
-  expect_equal(spec$fields[["fromdate"]], "10/29/2026")
+  expect_equal(spec$fields[["fromdate"]], "2026-10-29")
   expect_false("submit" %in% names(spec$fields))
+})
+
+test_that("the live date field name and date format are honoured", {
+  html <- paste(
+    '<html><body><form id="frm_todayshareprice" method="POST" action="">',
+    '<input type="hidden" name="_token" value="tok">',
+    '<select name="sector"><option value="all_sec">All Sector</option></select>',
+    '<input type="text" name="date" id="fromdate" value="2026-10-30"',
+    ' data-date-format="YYYY-MM-DD"></form></body></html>'
+  )
+  spec <- nepse_date_filter_fields(
+    xml2::read_html(html), as.Date("2026-10-29"), nepse_prices_url()
+  )
+  expect_equal(spec$fields[["date"]], "2026-10-29")
+  expect_equal(spec$fields[["sector"]], "all_sec")
+  expect_equal(spec$fields[["_token"]], "tok")
+  expect_equal(spec$action, nepse_ajax_prices_url())
 })
 
 test_that("the sub-index table is parsed", {
