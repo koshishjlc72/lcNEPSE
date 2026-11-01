@@ -1,61 +1,40 @@
-# Diagnostic helper: probes how ShareSansar's date filter is actually driven.
+# Diagnostic helper: find how ShareSansar's date filter reaches the server.
 # Run by diagnose-page.yml only.
 
-dir.create("diagnose", showWarnings = FALSE)
-base <- "https://www.sharesansar.com/today-share-price"
-
-fetch <- function(label, url, post = FALSE, fields = NULL, ajax = FALSE) {
+get_text <- function(url) {
   handle <- curl::new_handle()
   curl::handle_setopt(
     handle,
     useragent = "lcNEPSE diagnostic (+https://github.com/koshishjlc72/lcNEPSE)",
     followlocation = TRUE, timeout = 60
   )
-  if (ajax) curl::handle_setopt(handle, httpheader = "X-Requested-With: XMLHttpRequest")
-  if (post) {
-    body <- paste(
-      paste0(curl::curl_escape(names(fields)), "=", curl::curl_escape(unlist(fields))),
-      collapse = "&"
-    )
-    curl::handle_setopt(handle, post = TRUE, postfields = body)
-  }
-  res <- try(curl::curl_fetch_memory(url, handle = handle), silent = TRUE)
-  cat("\n###", label, "\n")
-  if (inherits(res, "try-error")) {
-    cat("error:", conditionMessage(attr(res, "condition")), "\n")
-    return(invisible(NULL))
-  }
-  cat("status:", res$status_code, "bytes:", length(res$content), "\n")
+  res <- curl::curl_fetch_memory(url, handle = handle)
   txt <- rawToChar(res$content)
   Encoding(txt) <- "UTF-8"
-  writeLines(substr(txt, 1, 300), stdout())
-  doc <- try(xml2::read_html(res$content), silent = TRUE)
-  if (inherits(doc, "try-error")) return(invisible(NULL))
-  table <- NULL
-  tables <- xml2::xml_find_all(doc, "//table")
-  for (t in tables) {
-    h <- xml2::xml_find_all(t, ".//th")
-    if ("Symbol" %in% xml2::xml_text(h) && "Open" %in% xml2::xml_text(h)) {
-      table <- t
-      break
-    }
-  }
-  if (is.null(table)) {
-    cat("price table: none\n")
-    return(invisible(NULL))
-  }
-  headers <- xml2::xml_find_all(table, ".//th")
-  cat("price table rows:", length(xml2::xml_find_all(table, ".//tbody/tr")), "\n")
-  hit <- xml2::xml_find_first(table, "preceding::*[contains(., 'As of')][1]")
-  cat("as of:", if (inherits(hit, "xml_missing")) "none" else gsub("\\s+", " ", xml2::xml_text(hit)), "\n")
-  invisible(NULL)
+  txt
 }
 
-fetch("GET no date", base)
-fetch("GET ?date=2026-10-29", paste0(base, "?date=2026-10-29"))
-fetch("GET ?date=2026-10-30", paste0(base, "?date=2026-10-30"))
-fetch("GET /2026-10-29", paste0(base, "/2026-10-29"))
-fetch("POST plain", base, post = TRUE, fields = list(date = "2026-10-29", sector = ""))
-fetch("POST ajax", base, post = TRUE, fields = list(date = "2026-10-29", sector = ""), ajax = TRUE)
+urls <- c(
+  "https://content.sharesansar.com/site/js/script_1.4.min.js",
+  "https://content.sharesansar.com/site/js/main_2.0.min.js"
+)
+needles <- c("btn_todayshareprice_submit", "todayshareprice", "fromdate")
 
+for (url in urls) {
+  cat("\n###", url, "\n")
+  txt <- try(get_text(url), silent = TRUE)
+  if (inherits(txt, "try-error")) {
+    cat("error\n")
+    next
+  }
+  cat("chars:", nchar(txt), "\n")
+  for (needle in needles) {
+    hits <- gregexpr(needle, txt, fixed = TRUE)[[1L]]
+    if (hits[[1L]] == -1L) next
+    cat("\n---", needle, "hits:", length(hits), "---\n")
+    for (i in utils::head(hits, 2L)) {
+      cat(substr(txt, max(1L, i - 400L), i + 600L), "\n~~~\n", sep = "")
+    }
+  }
+}
 cat("\nDIAGNOSE_OK\n")
