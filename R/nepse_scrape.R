@@ -85,8 +85,10 @@ nepse_scrape_prices <- function(date = NULL) {
 
   table <- nepse_find_table(doc, nepse_prices_source_labels())
   if (is.null(table)) {
+    snippet <- substr(gsub("\\s+", " ", page), 1L, 400L)
     nepse_stop(
-      "ShareSansar did not return the expected share-price table. The page layout may have changed."
+      "ShareSansar did not return the expected share-price table. Response begins: %s",
+      snippet
     )
   }
   nepse_assert_single_page(table)
