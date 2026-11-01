@@ -38,9 +38,12 @@ nepse_header_cells <- function(table) {
 }
 
 nepse_as_of_date <- function(node) {
-  hit <- xml2::xml_find_first(
-    node, "preceding::text()[contains(., 'As of')][1]"
-  )
+  # The page nests the date, e.g. <h5>As of : <span>2026-10-30</span></h5>, so
+  # read the nearest preceding element's full text rather than one text node.
+  hit <- xml2::xml_find_first(node, "preceding::*[contains(., 'As of')][1]")
+  if (inherits(hit, "xml_missing")) {
+    hit <- xml2::xml_find_first(node, "preceding::text()[contains(., 'As of')][1]")
+  }
   if (inherits(hit, "xml_missing")) return(as.Date(NA))
   text <- xml2::xml_text(hit)
   m <- regmatches(text, regexpr("[0-9]{4}-[0-9]{2}-[0-9]{2}", text))

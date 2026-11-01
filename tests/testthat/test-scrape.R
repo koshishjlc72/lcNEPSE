@@ -39,6 +39,27 @@ test_that("the table date is read from the preceding 'As of' label", {
   expect_equal(nepse_as_of_date(table), as.Date("2026-10-30"))
 })
 
+test_that("the date is read when ShareSansar nests it in a span", {
+  html <- paste(readLines(fixture_path("prices-page.html"), warn = FALSE), collapse = "\n")
+  nested <- sub(
+    "<h4>As of : 2026-10-30</h4>",
+    '<h5>As of : <span class="text-org">2026-10-30</span></h5>',
+    html, fixed = TRUE
+  )
+  expect_false(identical(nested, html))
+  doc <- xml2::read_html(nested)
+  table <- nepse_find_table(doc, nepse_prices_source_labels())
+  expect_equal(nepse_as_of_date(table), as.Date("2026-10-30"))
+})
+
+test_that("an undated table reports a missing date", {
+  html <- paste(readLines(fixture_path("prices-page.html"), warn = FALSE), collapse = "\n")
+  undated <- sub("<h4>As of : 2026-10-30</h4>", "", html, fixed = TRUE)
+  doc <- xml2::read_html(undated)
+  table <- nepse_find_table(doc, nepse_prices_source_labels())
+  expect_true(is.na(nepse_as_of_date(table)))
+})
+
 test_that("a renamed column is a hard failure", {
   doc <- xml2::read_html(fixture_path("prices-page.html"))
   table <- nepse_find_table(doc, nepse_prices_source_labels())
