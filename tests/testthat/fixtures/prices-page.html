@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Today Share Price - || ShareSansar ||</title></head>
+<body>
+  <div class="container">
+    <h4>Today Share Price</h4>
+
+    <form method="POST" action="https://www.sharesansar.com/today-share-price" id="frm_todayshareprice">
+      <input type="hidden" name="_token" value="token-abc123">
+      <div class="form-group">
+        <label for="fromdate">Date</label>
+        <input type="text" class="form-control" id="fromdate" name="fromdate" value="">
+      </div>
+      <select class="form-control" name="sector">
+        <option value="" selected="selected">All Sectors</option>
+        <option value="1">Commercial Banks</option>
+        <option value="2">Hydropower</option>
+      </select>
+      <input type="submit" name="submit" value="Search">
+      <button type="button" id="btn_reset">Reset</button>
+    </form>
+
+    <table class="table">
+      <tr><th>Date</th><th>Headline</th></tr>
+      <tr><td>2026-10-30</td><td>NEPSE Declines After Three Consecutive Days of Gains</td></tr>
+    </table>
+
+    <h4>As of : 2026-10-30</h4>
+    <div class="floatThead-wrapper">
+      <table class="table table-bordered table-striped table-hover dataTable compact no-footer" id="headertable">
+        <thead>
+          <tr>
+            <th>S.No</th>
+            <th>Symbol</th>
+            <th>Conf.</th>
+            <th>Open</th>
+            <th>High</th>
+            <th>Low</th>
+            <th>Close</th>
+            <th>LTP</th>
+            <th>Close - LTP</th>
+            <th>Close - LTP %</th>
+            <th>VWAP</th>
+            <th>Vol</th>
+            <th>Prev. Close</th>
+            <th>Turnover</th>
+            <th>Trans.</th>
+            <th>Diff</th>
+            <th>Range</th>
+            <th>Diff %</th>
+            <th>Range %</th>
+            <th>VWAP %</th>
+            <th>120 Days</th>
+            <th>180 Days</th>
+            <th>52 Weeks High</th>
+            <th>52 Weeks Low</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td><a href="https://www.sharesansar.com/company/aclbsl" title="Aarambha Chautari Laghubitta Bittiya Sanstha Limited">ACLBSL</a></td>
+            <td>40.92</td><td>863.50</td><td>863.90</td><td>851.00</td><td>854.00</td><td>854.00</td>
+            <td>0.00</td><td>0.00</td><td>855.77</td><td>394.00</td><td>858.80</td><td>337,173.60</td>
+            <td>8</td><td>-4.80</td><td>12.90</td><td>-0.56</td><td>1.52</td><td>-0.21</td>
+            <td>918.29</td><td>941.12</td><td>1,095.00</td><td>827.90</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td><a href="https://www.sharesansar.com/company/adbl" title="Agricultural Development Bank Limited">ADBL</a></td>
+            <td>40.08</td><td>350.00</td><td>355.00</td><td>343.00</td><td>347.00</td><td>347.00</td>
+            <td>0.00</td><td>0.00</td><td>348.51</td><td>366,409.00</td><td>348.90</td><td>127,696,988.50</td>
+            <td>605</td><td>-1.90</td><td>12.00</td><td>-0.54</td><td>3.50</td><td>-0.43</td>
+            <td>310.86</td><td>310.45</td><td>355.00</td><td>285.20</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td><a href="https://www.sharesansar.com/company/gbild84/85" title="11.25% Global IME Bank Debenture 2084/85">GBILD84/85</a></td>
+            <td>28.56</td><td>1,117.00</td><td>1,118.00</td><td>1,106.00</td><td>1,106.00</td><td>1,106.00</td>
+            <td>0.00</td><td>0.00</td><td>1,110.98</td><td>220.00</td><td>1,115.00</td><td>244,415.00</td>
+            <td>3</td><td>-9.00</td><td>12.00</td><td>-0.81</td><td>1.08</td><td>-0.45</td>
+            <td>1,156.91</td><td>1,158.85</td><td>1,238.00</td><td>1,067.00</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td><a href="https://www.sharesansar.com/company/testd91" title="Test Debenture 2091">TESTD91</a></td>
+            <td>24.00</td><td>-</td><td>-</td><td>-</td><td>1,000.00</td><td>1,000.00</td>
+            <td>0.00</td><td>0.00</td><td>1,000.00</td><td>-</td><td>1,000.00</td><td>-</td>
+            <td>-</td><td>0.00</td><td>0.00</td><td>0.00</td><td>0.00</td><td>0.00</td>
+            <td>-</td><td>-</td><td>1,000.00</td><td>900.00</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td><a href="https://www.sharesansar.com/company/unl" title="Unilever Nepal Limited">UNL</a></td>
+            <td>23.60</td><td>48,001.00</td><td>48,001.00</td><td>48,001.00</td><td>48,001.00</td><td>48,001.00</td>
+            <td>0.00</td><td>0.00</td><td>48,001.00</td><td>10.00</td><td>48,000.00</td><td>480,010.00</td>
+            <td>1</td><td>1.00</td><td>0.00</td><td>0.00</td><td>0.00</td><td>0.00</td>
+            <td>47,203.10</td><td>47,114.95</td><td>49,955.00</td><td>45,200.00</td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td><a href="https://www.sharesansar.com/company/csy" title="Citizens Santulit Yojana">CSY</a></td>
+            <td>27.17</td><td>8.73</td><td>9.00</td><td>8.73</td><td>9.00</td><td>9.00</td>
+            <td>0.00</td><td>0.00</td><td>8.90</td><td>4,300.00</td><td>9.00</td><td>38,283.00</td>
+            <td>15</td><td>0.00</td><td>0.27</td><td>0.00</td><td>3.09</td><td>1.08</td>
+            <td>8.98</td><td>0.00</td><td>10.00</td><td>8.01</td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td>PLAIN</td>
+            <td>30.00</td><td>100.00</td><td>105.00</td><td>99.00</td><td>102.00</td><td>102.00</td>
+            <td>0.00</td><td>0.00</td><td>101.50</td><td>1,000.00</td><td>101.00</td><td>101,500.00</td>
+            <td>10</td><td>1.00</td><td>6.00</td><td>0.99</td><td>5.94</td><td>0.50</td>
+            <td>0.00</td><td>0.00</td><td>120.00</td><td>90.00</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,6 @@
+^data-raw$
+^\.github$
+^.*\.Rproj$
+^\.Rproj\.user$
+^docs$
+^cran-comments\.md$

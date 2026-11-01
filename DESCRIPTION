@@ -1,0 +1,38 @@
+Package: lcNEPSE
+Title: Reproducible Access to Nepalese Stock Market Data
+Version: 0.1.0
+Authors@R:
+    person("Koshish Jung", "Lamichhane",
+           email = "Koshishl.c@gmail.com",
+           role = c("aut", "cre"),
+           comment = c(ORCID = "0009-0002-5455-5741"))
+Description: Provides reproducible, automated access to daily share prices and
+    sector indices from Nepal's secondary market as published by ShareSansar.
+    A scheduled GitHub Actions workflow scrapes the published tables, preserves
+    a dated archive with content hashes, validates every partition, and
+    publishes it to a GitHub data branch. The package retrieves only
+    hash-verified partition files, standardizes them into tidy data, and keeps
+    the original source URL and archive vintage attached to every observation.
+    This independent package is not affiliated with or endorsed by ShareSansar
+    or the Nepal Stock Exchange.
+URL: https://github.com/koshishjlc72/lcNEPSE
+BugReports: https://github.com/koshishjlc72/lcNEPSE/issues
+License: MIT + file LICENSE
+Depends: R (>= 4.1.0)
+Imports:
+    curl,
+    digest,
+    dplyr,
+    stringr,
+    tibble,
+    xml2
+Suggests:
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0),
+    withr
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3

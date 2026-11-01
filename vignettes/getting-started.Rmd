@@ -1,0 +1,127 @@
+---
+title: "Getting started with lcNEPSE"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with lcNEPSE}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+```{r setup}
+library(lcNEPSE)
+```
+
+`lcNEPSE` reads a dated, hash-verified archive of Nepalese share prices and
+sector indices published by ShareSansar. The archive is refreshed by GitHub
+Actions; the package itself only reads it.
+
+## What is available
+
+```{r catalog}
+nepse_catalog()
+```
+
+`nepse_catalog()` reports each dataset, its date coverage, how many monthly
+partitions exist, and when the archive was last updated. The first call
+downloads `manifest.csv` and caches it for fifteen minutes.
+
+## Find a symbol
+
+```{r search}
+nepse_search("hydro")
+nepse_symbols()
+```
+
+Symbols are matched case-insensitively. `nepse_symbols()` returns the current
+master: symbol, company name, first and last archived date.
+
+## Daily prices
+
+```{r prices}
+nabil <- nepse_prices("NABIL", start = "2026-10-01", end = "2026-10-30")
+nabil
+```
+
+One row per symbol and trading day. Prices are in NPR per share, volume in
+shares as published, turnover in NPR, and transactions as a count.
+
+Every row keeps its provenance:
+
+```{r provenance}
+nabil[, c("trading_date", "symbol", "close", "source_url",
+          "retrieved_at", "source_sha256", "parser_version")]
+```
+
+`source_url` is the ShareSansar page the snapshot came from, `retrieved_at` is
+when the archiver read it, and `source_sha256` is the hash of the partition
+file in the archive.
+
+For plotting or joining, ask for long format:
+
+```{r long}
+nepse_prices("NABIL", start = "2026-10-01", long = TRUE)
+```
+
+## Sector indices
+
+```{r indices}
+nepse_indices(start = "2026-10-01")
+```
+
+## Market summaries
+
+```{r market}
+nepse_market(start = "2026-10-01")
+```
+
+`nepse_market()` aggregates the price archive into turnover, volume,
+transactions, and counts of advancing, declining, and unchanged symbols per
+trading day.
+
+## Inspecting the archive
+
+```{r inspect}
+nepse_dates()
+nepse_latest()
+raw <- nepse_read_raw("prices", "2026-10")
+head(raw)
+```
+
+`nepse_read_raw()` returns the archived CSV as text columns, before
+standardization. This is useful for auditing a partition or for reading a
+column the typed interface does not expose.
+
+## Updating the local index
+
+```{r update}
+nepse_update(dry_run = TRUE)
+```
+
+`nepse_update(dry_run = TRUE)` compares the cached manifest with the published
+one without touching the cache. `nepse_cache_info()` lists downloaded
+partitions and `nepse_clear_cache()` removes them.
+
+## Reading ShareSansar directly
+
+```{r live}
+nepse_prices(source = "live")
+```
+
+Live mode scrapes the current page and returns that trading day only. It is
+useful when the archive has not run yet for the day; results are not
+reproducible after the page changes, which is why the archive is the default.
+
+## Reproducibility
+
+Archive the values you rely on:
+
+```{r session}
+sessionInfo()
+```
+
+Retain `source_url`, `retrieved_at`, and `source_sha256` with any published
+analysis. Cite ShareSansar as the data source.
