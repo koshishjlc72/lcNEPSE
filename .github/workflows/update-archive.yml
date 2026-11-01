@@ -67,11 +67,11 @@ jobs:
         run: |
           set -o pipefail
           if [ -n "$BACKFILL_FROM" ] && [ -n "$BACKFILL_TO" ]; then
-            Rscript data-raw/backfill-archive.R archive "$BACKFILL_FROM" "$BACKFILL_TO" | tee step.log
+            Rscript data-raw/backfill-archive.R archive "$BACKFILL_FROM" "$BACKFILL_TO" 2>&1 | tee step.log
           elif [ -n "$INPUT_DATE" ]; then
-            Rscript data-raw/update-archive.R archive --date="$INPUT_DATE" | tee step.log
+            Rscript data-raw/update-archive.R archive --date="$INPUT_DATE" 2>&1 | tee step.log
           else
-            Rscript data-raw/update-archive.R archive | tee step.log
+            Rscript data-raw/update-archive.R archive 2>&1 | tee step.log
           fi
 
       - name: Verify the archive through the public API
@@ -87,6 +87,6 @@ jobs:
             echo "Archive already current; nothing to publish."
             exit 0
           fi
-          summary=$(grep -E '^(prices|indices): ' step.log | tr '\n' ' ')
+          summary=$(grep -E '^(prices|indices): ' step.log | tr '\n' ' ' || true)
           git -C archive commit -m "data: archive ShareSansar session ${summary:-update}"
           git -C archive push origin HEAD:data-archive
