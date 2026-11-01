@@ -268,26 +268,34 @@ archive_update <- function(target, date = NULL, datasets = c("prices", "indices"
   if ("indices" %in% datasets) {
     indices <- nepse_scrape_indices()
     nepse_validate_indices(indices, error = TRUE, min_rows = 5L)
-    step <- archive_day(
-      target, manifest, "indices", indices, "indices-1.0.0",
-      c("trading_date", "index_name")
-    )
-    manifest <- step$manifest
-    changed <- changed || step$changed
-    if (step$changed) {
-      month <- format(unique(indices$trading_date), "%Y-%m")
-      monthly <- archive_month(
-        target, manifest, "indices", month, "indices-1.0.0",
+    index_day <- unique(indices$trading_date)
+    if (!is.null(date) && !identical(index_day, as.Date(date))) {
+      message(sprintf(
+        "indices: skipping; the site only exposes the latest session (%s), not %s",
+        format(index_day, "%Y-%m-%d"), format(as.Date(date), "%Y-%m-%d")
+      ))
+    } else {
+      step <- archive_day(
+        target, manifest, "indices", indices, "indices-1.0.0",
         c("trading_date", "index_name")
       )
-      manifest <- monthly$manifest
-      changed <- changed || monthly$changed
+      manifest <- step$manifest
+      changed <- changed || step$changed
+      if (step$changed) {
+        month <- format(index_day, "%Y-%m")
+        monthly <- archive_month(
+          target, manifest, "indices", month, "indices-1.0.0",
+          c("trading_date", "index_name")
+        )
+        manifest <- monthly$manifest
+        changed <- changed || monthly$changed
+      }
+      message(sprintf(
+        "indices: %s rows for %s (%s)", nrow(indices),
+        format(index_day, "%Y-%m-%d"),
+        if (step$changed) "archived" else "already current"
+      ))
     }
-    message(sprintf(
-      "indices: %s rows for %s (%s)", nrow(indices),
-      format(unique(indices$trading_date), "%Y-%m-%d"),
-      if (step$changed) "archived" else "already current"
-    ))
   }
 
   archive_write_manifest(target, manifest)

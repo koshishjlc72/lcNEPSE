@@ -21,15 +21,23 @@ nepse_normalize_label <- function(x) {
   stringr::str_squish(x)
 }
 
-nepse_find_table <- function(doc, labels) {
+nepse_find_table <- function(doc, labels, optional = NULL) {
   expected <- vapply(labels, nepse_normalize_label, character(1), USE.NAMES = FALSE)
+  opt <- vapply(optional, nepse_normalize_label, character(1), USE.NAMES = FALSE)
   tables <- xml2::xml_find_all(doc, "//table")
+  best <- NULL
+  best_score <- -1L
   for (table in tables) {
     header <- nepse_header_cells(table)
     if (!length(header)) next
-    if (all(expected %in% header)) return(table)
+    if (!all(expected %in% header)) next
+    score <- if (length(opt)) sum(opt %in% header) else 0L
+    if (score > best_score) {
+      best <- table
+      best_score <- score
+    }
   }
-  NULL
+  best
 }
 
 nepse_header_cells <- function(table) {
@@ -83,7 +91,10 @@ nepse_scrape_prices <- function(date = NULL) {
     doc <- xml2::read_html(page)
   }
 
-  table <- nepse_find_table(doc, nepse_prices_source_labels())
+  optional <- if (is.null(date)) NULL else nepse_prices_optional_labels()
+  required <- nepse_prices_source_labels()
+  if (!is.null(optional)) required <- required[!names(required) %in% names(optional)]
+  table <- nepse_find_table(doc, required, optional = optional)
   if (is.null(table)) {
     snippet <- substr(gsub("\\s+", " ", page), 1L, 400L)
     nepse_stop(
@@ -114,7 +125,7 @@ nepse_scrape_prices <- function(date = NULL) {
     )
   }
 
-  out <- nepse_parse_price_table(table)
+  out <- nepse_parse_price_table(table, optional = optional)
   out$trading_date <- as_of
   out$source_url <- url
   out$retrieved_at <- nepse_now_utc()
@@ -218,7 +229,7 @@ nepse_indices_source_labels <- function() {
   )
 }
 
-nepse_column_positions <- function(header, labels) {
+nepse_column_positions <- function(header, labels, optional = NULL) {
   normalized <- vapply(labels, nepse_normalize_label, character(1), USE.NAMES = FALSE)
   pos <- match(normalized, header)
   if (anyNA(pos)) {
@@ -228,7 +239,16 @@ nepse_column_positions <- function(header, labels) {
       paste(header, collapse = " | ")
     )
   }
-  stats::setNames(pos, names(labels))
+  names(pos) <- names(labels)
+  if (length(optional)) {
+    optional_pos <- match(
+      vapply(optional, nepse_normalize_label, character(1), USE.NAMES = FALSE),
+      header
+    )
+    names(optional_pos) <- names(optional)
+    pos <- c(pos, optional_pos)
+  }
+  pos
 }
 
 nepse_row_cells <- function(row, ncol, index) {
@@ -242,9 +262,15 @@ nepse_row_cells <- function(row, ncol, index) {
   cells
 }
 
-nepse_parse_price_table <- function(table) {
+nepse_prices_optional_labels <- function() {
+  c(avg_120d = "120 Days", avg_180d = "180 Days")
+}
+
+nepse_parse_price_table <- function(table, optional = NULL) {
   header <- nepse_header_cells(table)
-  pos <- nepse_column_positions(header, nepse_prices_source_labels())
+  required <- nepse_prices_source_labels()
+  if (length(optional)) required <- required[!names(required) %in% names(optional)]
+  pos <- nepse_column_positions(header, required, optional = optional)
   rows <- xml2::xml_find_all(table, ".//tbody/tr")
   if (!length(rows)) {
     rows <- xml2::xml_find_all(table, ".//tr")
@@ -260,8 +286,19 @@ nepse_parse_price_table <- function(table) {
   cells <- lapply(seq_along(rows), function(i) {
     nepse_row_cells(rows[[i]], length(header), i)
   })
+  n_rows <- length(cells)
   cell_text <- function(field) {
-    vapply(cells, function(cs) nepse_clean_text(xml2::xml_text(cs[[pos[[field]]]])), character(1))
+    column <- pos[[field]]
+    if (is.na(column)) return(rep(NA_character_, n_rows))
+    vapply(cells, function(cs) nepse_clean_text(xml2::xml_text(cs[[column]])), character(1))
+  }
+  cell_number <- function(field) {
+    if (is.na(pos[[field]])) return(rep(NA_real_, n_rows))
+    nepse_parse_number(cell_text(field), field)
+  }
+  cell_percent <- function(field) {
+    if (is.na(pos[[field]])) return(rep(NA_real_, n_rows))
+    nepse_parse_percent(cell_text(field), field)
   }
 
   symbol_cells <- lapply(cells, function(cs) cs[[pos[["symbol"]]]])
@@ -278,28 +315,28 @@ nepse_parse_price_table <- function(table) {
   out <- tibble::tibble(
     symbol = symbol,
     company_name = company,
-    conf = nepse_parse_number(cell_text("conf"), "conf"),
-    open = nepse_parse_number(cell_text("open"), "open"),
-    high = nepse_parse_number(cell_text("high"), "high"),
-    low = nepse_parse_number(cell_text("low"), "low"),
-    close = nepse_parse_number(cell_text("close"), "close"),
-    ltp = nepse_parse_number(cell_text("ltp"), "ltp"),
-    close_ltp_diff = nepse_parse_number(cell_text("close_ltp_diff"), "close_ltp_diff"),
-    close_ltp_pct = nepse_parse_percent(cell_text("close_ltp_pct"), "close_ltp_pct"),
-    vwap = nepse_parse_number(cell_text("vwap"), "vwap"),
-    volume = nepse_parse_number(cell_text("volume"), "volume"),
-    prev_close = nepse_parse_number(cell_text("prev_close"), "prev_close"),
-    turnover = nepse_parse_number(cell_text("turnover"), "turnover"),
-    transactions = nepse_parse_number(cell_text("transactions"), "transactions"),
-    diff = nepse_parse_number(cell_text("diff"), "diff"),
-    range = nepse_parse_number(cell_text("range"), "range"),
-    diff_pct = nepse_parse_percent(cell_text("diff_pct"), "diff_pct"),
-    range_pct = nepse_parse_percent(cell_text("range_pct"), "range_pct"),
-    vwap_pct = nepse_parse_percent(cell_text("vwap_pct"), "vwap_pct"),
-    avg_120d = nepse_parse_number(cell_text("avg_120d"), "avg_120d"),
-    avg_180d = nepse_parse_number(cell_text("avg_180d"), "avg_180d"),
-    high_52w = nepse_parse_number(cell_text("high_52w"), "high_52w"),
-    low_52w = nepse_parse_number(cell_text("low_52w"), "low_52w")
+    conf = cell_number("conf"),
+    open = cell_number("open"),
+    high = cell_number("high"),
+    low = cell_number("low"),
+    close = cell_number("close"),
+    ltp = cell_number("ltp"),
+    close_ltp_diff = cell_number("close_ltp_diff"),
+    close_ltp_pct = cell_percent("close_ltp_pct"),
+    vwap = cell_number("vwap"),
+    volume = cell_number("volume"),
+    prev_close = cell_number("prev_close"),
+    turnover = cell_number("turnover"),
+    transactions = cell_number("transactions"),
+    diff = cell_number("diff"),
+    range = cell_number("range"),
+    diff_pct = cell_percent("diff_pct"),
+    range_pct = cell_percent("range_pct"),
+    vwap_pct = cell_percent("vwap_pct"),
+    avg_120d = cell_number("avg_120d"),
+    avg_180d = cell_number("avg_180d"),
+    high_52w = cell_number("high_52w"),
+    low_52w = cell_number("low_52w")
   )
   if (any(!nzchar(out$symbol))) nepse_stop("ShareSansar price table contains an empty symbol.")
   if (anyDuplicated(out$symbol)) {

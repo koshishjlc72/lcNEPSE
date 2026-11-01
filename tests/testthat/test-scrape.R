@@ -60,6 +60,34 @@ test_that("an undated table reports a missing date", {
   expect_true(is.na(nepse_as_of_date(table)))
 })
 
+test_that("the historical fragment without 120/180-day columns parses", {
+  doc <- xml2::read_html(fixture_path("prices-page.html"))
+  table <- nepse_find_table(doc, nepse_prices_source_labels())
+  header <- nepse_header_cells(table)
+  drop <- which(header %in% c("120 days", "180 days"))
+  expect_equal(length(drop), 2L)
+
+  headers <- xml2::xml_find_all(table, ".//thead//th")
+  for (i in sort(drop, decreasing = TRUE)) xml2::xml_remove(headers[[i]])
+  for (row in xml2::xml_find_all(table, ".//tbody/tr")) {
+    cells <- xml2::xml_find_all(row, "./td")
+    for (i in sort(drop, decreasing = TRUE)) xml2::xml_remove(cells[[i]])
+  }
+
+  required <- nepse_prices_source_labels()
+  optional <- nepse_prices_optional_labels()
+  required <- required[!names(required) %in% names(optional)]
+  doc2 <- xml2::read_html(as.character(doc))
+  table2 <- nepse_find_table(doc2, required, optional = optional)
+  expect_false(is.null(table2))
+
+  out <- nepse_parse_price_table(table2, optional = optional)
+  expect_equal(nrow(out), 7L)
+  expect_true(all(is.na(out$avg_120d)))
+  expect_true(all(is.na(out$avg_180d)))
+  expect_equal(out$close[out$symbol == "ACLBSL"], 854)
+})
+
 test_that("a renamed column is a hard failure", {
   doc <- xml2::read_html(fixture_path("prices-page.html"))
   table <- nepse_find_table(doc, nepse_prices_source_labels())
@@ -69,6 +97,13 @@ test_that("a renamed column is a hard failure", {
     nepse_column_positions(header, nepse_prices_source_labels()),
     "missing expected column"
   )
+})
+
+test_that("a missing required column still fails", {
+  html <- paste(readLines(fixture_path("prices-page.html"), warn = FALSE), collapse = "\n")
+  broken <- sub("<th>Open</th>", "<th>Opening</th>", html)
+  doc <- xml2::read_html(broken)
+  expect_null(nepse_find_table(doc, nepse_prices_source_labels()))
 })
 
 test_that("a ragged row is a hard failure", {
