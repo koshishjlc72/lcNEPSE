@@ -29,14 +29,16 @@ dates <- seq(from, to, by = "day")
 done <- 0L
 skipped <- character()
 
-for (day in dates) {
-  message(sprintf("== %s", format(day, "%Y-%m-%d")))
+for (i in seq_along(dates)) {
+  day <- dates[[i]]
+  label <- format(day, "%Y-%m-%d")
+  message(sprintf("== %s", label))
   result <- tryCatch(
     archive_update(target, date = day, datasets = c("prices", "indices")),
     error = function(e) e
   )
   if (inherits(result, "error")) {
-    skipped <- c(skipped, sprintf("%s (%s)", format(day), conditionMessage(result)))
+    skipped <- c(skipped, sprintf("%s (%s)", label, conditionMessage(result)))
     message(sprintf("  skipped: %s", conditionMessage(result)))
   } else {
     done <- done + 1L
