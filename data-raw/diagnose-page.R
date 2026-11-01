@@ -1,40 +1,56 @@
-# Diagnostic helper: find how ShareSansar's date filter reaches the server.
+# Diagnostic helper: inspect the ShareSansar ajax date-filter response.
 # Run by diagnose-page.yml only.
 
-get_text <- function(url) {
-  handle <- curl::new_handle()
-  curl::handle_setopt(
-    handle,
-    useragent = "lcNEPSE diagnostic (+https://github.com/koshishjlc72/lcNEPSE)",
-    followlocation = TRUE, timeout = 60
-  )
-  res <- curl::curl_fetch_memory(url, handle = handle)
+base <- "https://www.sharesansar.com/today-share-price"
+ajax <- "https://www.sharesansar.com/ajaxtodayshareprice"
+jar <- tempfile(fileext = ".cookies")
+
+handle <- curl::new_handle()
+curl::handle_setopt(
+  handle,
+  useragent = "lcNEPSE diagnostic (+https://github.com/koshishjlc72/lcNEPSE)",
+  followlocation = TRUE, timeout = 60,
+  cookiefile = jar, cookiejar = jar
+)
+
+page <- rawToChar(curl::curl_fetch_memory(base, handle = handle)$content)
+Encoding(page) <- "UTF-8"
+doc <- xml2::read_html(page)
+form <- xml2::xml_find_first(doc, "//form[@id='frm_todayshareprice']")
+token <- xml2::xml_attr(
+  xml2::xml_find_first(form, ".//input[@name='_token']"), "value"
+)
+cat("token length:", nchar(token), "\n")
+
+fields <- list(
+  `_token` = token,
+  sector = "all_sec",
+  date = "2026-10-29"
+)
+body <- paste(
+  paste0(curl::curl_escape(names(fields)), "=", curl::curl_escape(unlist(fields))),
+  collapse = "&"
+)
+
+for (label in c("with headers", "without headers")) {
+  h <- handle
+  if (identical(label, "with headers")) {
+    curl::handle_setopt(
+      h, httpheader = c("X-Requested-With: XMLHttpRequest", "Accept: text/html, */*")
+    )
+  }
+  curl::handle_setopt(h, post = TRUE, postfields = body, referer = base)
+  res <- curl::curl_fetch_memory(ajax, handle = h)
   txt <- rawToChar(res$content)
   Encoding(txt) <- "UTF-8"
-  txt
-}
-
-urls <- c(
-  "https://content.sharesansar.com/site/js/script_1.4.min.js",
-  "https://content.sharesansar.com/site/js/main_2.0.min.js"
-)
-needles <- c("btn_todayshareprice_submit", "todayshareprice", "fromdate")
-
-for (url in urls) {
-  cat("\n###", url, "\n")
-  txt <- try(get_text(url), silent = TRUE)
-  if (inherits(txt, "try-error")) {
-    cat("error\n")
-    next
+  cat("\n###", label, "status:", res$status_code, "bytes:", nchar(txt), "\n")
+  cat(substr(txt, 1, 1500), "\n")
+  doc2 <- try(xml2::read_html(res$content), silent = TRUE)
+  if (!inherits(doc2, "try-error")) {
+    cat("tables:", length(xml2::xml_find_all(doc2, "//table")), "\n")
+    cat("mentions Symbol:", grepl("Symbol", txt, fixed = TRUE), "\n")
+    cat("mentions As of:", grepl("As of", txt, fixed = TRUE), "\n")
   }
-  cat("chars:", nchar(txt), "\n")
-  for (needle in needles) {
-    hits <- gregexpr(needle, txt, fixed = TRUE)[[1L]]
-    if (hits[[1L]] == -1L) next
-    cat("\n---", needle, "hits:", length(hits), "---\n")
-    for (i in utils::head(hits, 2L)) {
-      cat(substr(txt, max(1L, i - 400L), i + 600L), "\n~~~\n", sep = "")
-    }
-  }
+  curl::handle_setopt(h, post = FALSE, postfields = NULL, httpheader = NULL)
 }
 cat("\nDIAGNOSE_OK\n")
