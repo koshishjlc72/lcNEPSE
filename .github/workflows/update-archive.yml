@@ -1,0 +1,92 @@
+name: Update ShareSansar data archive
+
+on:
+  schedule:
+    # 16:45 and 20:00 Nepal time (UTC+5:45) on NEPSE trading days.
+    - cron: '0 11 * * 0-4'
+    - cron: '15 14 * * 0-4'
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Single trading date to archive (YYYY-MM-DD), or empty for the latest session'
+        required: false
+        default: ''
+      backfill_from:
+        description: 'Backfill start date (YYYY-MM-DD); requires backfill_to'
+        required: false
+        default: ''
+      backfill_to:
+        description: 'Backfill end date (YYYY-MM-DD)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lcnepse-data-archive
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::pkgload
+
+      - name: Prepare data-archive worktree
+        shell: bash
+        run: |
+          if git ls-remote --exit-code --heads origin data-archive >/dev/null 2>&1; then
+            git fetch origin data-archive
+            git worktree add archive FETCH_HEAD
+            git -C archive checkout -B data-archive
+          else
+            git worktree add --detach archive
+            git -C archive checkout --orphan data-archive
+            git -C archive rm -rf . >/dev/null 2>&1 || true
+          fi
+          cp -f data-raw/archive-README.md archive/README.md
+
+      - name: Archive ShareSansar data
+        shell: bash
+        env:
+          INPUT_DATE: ${{ github.event.inputs.date }}
+          BACKFILL_FROM: ${{ github.event.inputs.backfill_from }}
+          BACKFILL_TO: ${{ github.event.inputs.backfill_to }}
+        run: |
+          set -o pipefail
+          if [ -n "$BACKFILL_FROM" ] && [ -n "$BACKFILL_TO" ]; then
+            Rscript data-raw/backfill-archive.R archive "$BACKFILL_FROM" "$BACKFILL_TO" | tee step.log
+          elif [ -n "$INPUT_DATE" ]; then
+            Rscript data-raw/update-archive.R archive --date="$INPUT_DATE" | tee step.log
+          else
+            Rscript data-raw/update-archive.R archive | tee step.log
+          fi
+
+      - name: Verify the archive through the public API
+        run: Rscript data-raw/verify-archive.R archive
+
+      - name: Publish only a fully verified archive
+        shell: bash
+        run: |
+          git -C archive config user.name "lcNEPSE data archive bot"
+          git -C archive config user.email "actions@users.noreply.github.com"
+          git -C archive add -A
+          if git -C archive diff --cached --quiet; then
+            echo "Archive already current; nothing to publish."
+            exit 0
+          fi
+          summary=$(grep -E '^(prices|indices): ' step.log | tr '\n' ' ')
+          git -C archive commit -m "data: archive ShareSansar session ${summary:-update}"
+          git -C archive push origin HEAD:data-archive
