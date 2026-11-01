@@ -1,0 +1,6 @@
+"dataset_id","partition","path","first_date","last_date","rows","sha256","updated_at","source_url","parser_version","current"
+"indices","2026-10","data/indices/monthly/2026-10.csv","2026-10-30","2026-10-30","13","ceba9573f1785f89d39f24b03fcaddfcec0d2963f87aa01da195bce6da726fd6","2026-11-01 05:10:08 UTC","https://www.sharesansar.com/","indices-1.0.0","true"
+"indices","2026-10-30","data/indices/daily/2026/2026-10-30.csv","2026-10-30","2026-10-30","13","19e0490867c3e6cc8e8995dc50f84104734dadf7e42bbc3c2c5042ef1cde9324","2026-11-01 05:10:08 UTC","https://www.sharesansar.com/","indices-1.0.0","true"
+"prices","2026-10","data/prices/monthly/2026-10.csv","2026-10-30","2026-10-30","348","db0d41e18536a8ef56bd895f14cfd30c063f0a25c90e9f1c6beead0cdd4aa9b5","2026-11-01 05:10:08 UTC","https://www.sharesansar.com/today-share-price","prices-1.0.0","true"
+"prices","2026-10-30","data/prices/daily/2026/2026-10-30.csv","2026-10-30","2026-10-30","348","8e3ebf2f3a592c0509036f947c6403036a6d06977a41508a18023d5d4f29c73a","2026-11-01 05:10:08 UTC","https://www.sharesansar.com/today-share-price","prices-1.0.0","true"
+"symbols","current","data/symbols.csv","","","348","acdccbb907871c88702c3e5ff9e3ca3e92c0ec914433736adc35f5e8059c647a","2026-11-01 05:10:08 UTC","https://www.sharesansar.com/today-share-price","symbols-1.0.0","true"
