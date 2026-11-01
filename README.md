@@ -52,8 +52,15 @@ content-addressed copy. `refresh = TRUE` re-reads the archive manifest.
 | Dataset ID | Contents | Frequency |
 |---|---|---|
 | `prices` | Open, high, low, close, LTP, VWAP, volume, turnover, transactions, change, range, 120-day and 180-day averages, 52-week high and low, and ShareSansar's `Conf.` column | Every trading day |
-| `indices` | Open, high, low, close, turnover, point change, percent change, and 52-week range for each published sector sub-index | Every trading day |
+| `indices` | Open, high, low, close, turnover, point change, percent change, and 52-week range for each published sector sub-index | Latest session |
 | `symbols` | Symbol, company name, first and last archived date | Current master |
+
+The 120-day and 180-day averages are published on the current-session price
+table. ShareSansar's date-filter view omits those two columns, so a
+back-filled historical day stores them as missing rather than inventing
+values. Sector indices are only published for the latest session, so they are
+archived for that session only; `nepse_indices()` therefore covers fewer dates
+than `nepse_prices()`.
 
 Every price row also carries `source_url`, `retrieved_at`, `source_sha256`,
 `archive_path`, `archive_updated_at`, and `parser_version`.
@@ -85,6 +92,12 @@ The Actions job runs after the close on NEPSE trading days. It:
 If ShareSansar revises a session after it was archived, the previous content is
 kept as `YYYY-MM-DD@<hash8>.csv` and only one version is marked `current`.
 
+Historical sessions can be back-filled through the same workflow. ShareSansar's
+date filter is an AJAX endpoint that returns the table without the 120-day and
+180-day columns and without sub-indices, so those fields are recorded as
+missing for back-filled days. Each day is validated and appended to the same
+monthly partition.
+
 ## Live mode
 
 The archive is the normal route, but the current page can be read directly:
@@ -108,11 +121,14 @@ archive.
 - The package never rewrites an archived partition. The cache is
   content-addressed, so a revised partition lands beside the old one.
 - ShareSansar's `Conf.` column is preserved exactly as published. The portal
-  does not document what it measures, so this package does not interpret it.
+  documents it as "Stock Confidence"; this package reproduces the number and
+  does not interpret it.
 - Sector labels for individual symbols are not published in the price table;
   `symbols` therefore does not invent a `sector` column.
 - Scraping depends on ShareSansar's HTML. A layout change fails the workflow
-  loudly and leaves the last verified archive in place.
+  loudly and leaves the last verified archive in place. The live page and the
+  dated AJAX view are validated against separate column contracts, so a change
+  in either fails instead of silently dropping columns.
 - Units are preserved: prices in NPR per share, volume in shares as published,
   turnover in NPR, transactions as a count, index levels in points.
 

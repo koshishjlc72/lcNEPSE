@@ -9,7 +9,9 @@
 - `nepse_index()` exposes the validated manifest; `nepse_cache_info()` and
   `nepse_clear_cache()` manage the runtime cache.
 - `nepse_scrape_prices()` and `nepse_scrape_indices()` read ShareSansar
-  directly, including a single historical date through the site's date filter.
+  directly. Historical dates go through the site's AJAX date filter, which
+  omits the 120-day and 180-day columns; those fields are recorded as missing
+  for back-filled days rather than invented.
 - The scheduled workflow archives each trading day, preserves revised days as
   versioned files, and publishes only after the archive passes a full
   read-through with an empty cache.
