@@ -5,3 +5,6 @@
 *.Rcheck/
 *.tar.gz
 docs/
+push.log
+step.log
+
