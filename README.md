@@ -47,6 +47,29 @@ The first request for a month downloads that monthly partition into the user
 cache (`tools::R_user_dir("lcNEPSE", "cache")`). Later requests reuse the
 content-addressed copy. `refresh = TRUE` re-reads the archive manifest.
 
+## How a call reaches the data
+
+No price data is bundled with the package. Each call reads the archive index
+and then downloads only the partitions it needs, straight from the repository:
+
+```text
+nepse_prices("NABIL", start = "2019-01-01")
+  -> GET .../data-archive/manifest.csv
+       validated, cached for 15 minutes
+  -> GET .../data-archive/data/prices/monthly/2019-01.csv
+       SHA-256 compared with the manifest entry
+  -> parsed, filtered to NABIL, returned with provenance columns
+```
+
+`nepse_archive_url()` prints the base URL in use. It can be redirected with
+`options(lcNEPSE.mirror_url = ...)`, or pointed at a local copy of the branch
+with `options(lcNEPSE.mirror_dir = ...)` for offline work. `refresh = TRUE`
+re-reads `manifest.csv`, so a session published a minute earlier is picked up
+without restarting R.
+
+Because every file is verified against a published hash, a truncated or
+substituted download fails loudly instead of entering the cache.
+
 ## What is archived
 
 | Dataset ID | Contents | Frequency |
