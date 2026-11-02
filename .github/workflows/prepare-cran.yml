@@ -1,0 +1,80 @@
+name: Prepare CRAN submission
+
+# Data stay in the separate data-archive branch and are never bundled.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/prepare-cran.yml'
+      - 'DESCRIPTION'
+      - 'NAMESPACE'
+      - 'R/**'
+      - 'man/**'
+      - 'inst/**'
+      - 'vignettes/**'
+      - 'tests/**'
+
+permissions:
+  contents: read
+
+jobs:
+  release-tarball:
+    name: Build and check source tarball (R release)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-pandoc@v2
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'release'
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+      - name: Build CRAN source tarball
+        shell: bash
+        run: |
+          set -euo pipefail
+          R CMD build .
+          mkdir -p cran-dist
+          find . -maxdepth 1 -name 'lcNEPSE_*.tar.gz' -exec cp {} cran-dist/ \;
+          test -n "$(find cran-dist -name 'lcNEPSE_*.tar.gz' -print -quit)"
+      - name: Check the built source tarball
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(find cran-dist -maxdepth 1 -name 'lcNEPSE_*.tar.gz' -print -quit)"
+          test -n "$tarball"
+          R CMD check --as-cran --no-manual "$tarball"
+      - name: Upload checked source tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: lcNEPSE-cran-source
+          path: cran-dist/lcNEPSE_*.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+  r-devel:
+    name: CRAN preflight (R devel)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-pandoc@v2
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: 'devel'
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+      - name: Run checks on R devel
+        shell: bash
+        run: |
+          set -euo pipefail
+          R CMD build .
+          tarball="$(find . -maxdepth 1 -name 'lcNEPSE_*.tar.gz' -print -quit)"
+          test -n "$tarball"
+          R CMD check --as-cran --no-manual "$tarball"
