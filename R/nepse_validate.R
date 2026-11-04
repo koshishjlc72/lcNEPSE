@@ -72,8 +72,18 @@ nepse_validate_indices <- function(data, error = TRUE, min_rows = 1L) {
     if (anyNA(data$close)) problems <- c(problems, "`close` contains missing values")
     key <- paste(data$trading_date, data$index_name, sep = "\r")
     if (anyDuplicated(key)) problems <- c(problems, "Duplicate index-date combinations")
-    ordered <- !is.na(data$high) & !is.na(data$low) & data$high < data$low
-    if (any(ordered)) problems <- c(problems, "`high` is below `low`; columns may be misaligned")
+    if (!is.logical(data$ohlc_consistent) || anyNA(data$ohlc_consistent)) {
+      problems <- c(problems, "`ohlc_consistent` must be a non-missing logical vector")
+    } else {
+      expected <- is.na(data$high) | is.na(data$low) | data$high >= data$low
+      if (any(data$ohlc_consistent != expected)) {
+        problems <- c(problems, "`ohlc_consistent` does not match the published high/low values")
+      }
+      flagged <- !data$ohlc_consistent
+      if (any(flagged & !nzchar(data$source_note))) {
+        problems <- c(problems, "Inconsistent OHLC rows require a non-empty `source_note`")
+      }
+    }
     if (nrow(data) < min_rows) {
       problems <- c(problems, sprintf("Only %d row(s) present; at least %d expected", nrow(data), min_rows))
     }

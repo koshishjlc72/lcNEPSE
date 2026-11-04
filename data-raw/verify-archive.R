@@ -53,7 +53,13 @@ if (any(prices$high < prices$low, na.rm = TRUE)) fail("A high price is below its
 
 indices <- nepse_indices()
 invisible(nepse_validate(indices))
-if (any(!indices$trading_date %in% dates)) fail("Index dates are absent from the price calendar.")
+if (!"NEPSE Index" %in% indices$index_name) fail("The NEPSE Index series is absent.")
+if (length(unique(indices$index_name)) < 10L) {
+  fail("Only %d index series are present.", length(unique(indices$index_name)))
+}
+if (min(indices$trading_date) >= min(dates)) {
+  fail("Historical index coverage does not predate the share-price archive.")
+}
 
 symbols <- nepse_symbols()
 if (any(!unique(prices$symbol) %in% symbols$symbol)) {

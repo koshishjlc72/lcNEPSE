@@ -32,8 +32,9 @@ nepse_prices("NABIL", start = "2026-10-01", end = "2026-10-30")
 # Everything archived for a set of symbols
 nepse_prices(c("NABIL", "NTC"), start = "2026-01-01")
 
-# Sector sub-index levels
-nepse_indices("Banking SubIndex", start = "2026-01-01")
+# Historical NEPSE and sector sub-index levels
+nepse_indices("NEPSE Index", start = "2010-01-01")
+nepse_indices("Banking SubIndex", start = "2010-01-01")
 
 # One row per trading day: turnover, volume, advancers, decliners
 nepse_market(start = "2026-10-01")
@@ -75,15 +76,16 @@ substituted download fails loudly instead of entering the cache.
 | Dataset ID | Contents | Frequency |
 |---|---|---|
 | `prices` | Open, high, low, close, LTP, VWAP, volume, turnover, transactions, change, range, 120-day and 180-day averages, 52-week high and low, and ShareSansar's `Conf.` column | Every trading day |
-| `indices` | Open, high, low, close, turnover, point change, percent change, and 52-week range for each published sector sub-index | Latest session |
+| `indices` | Open, high, low, close, turnover, point change, and percent change for the NEPSE, Sensitive, Float, Sensitive Float, and published sector/sub-index series | Every available trading day |
 | `symbols` | Symbol, company name, first and last archived date | Current master |
 
 The 120-day and 180-day averages are published on the current-session price
 table. ShareSansar's date-filter view omits those two columns, so a
 back-filled historical day stores them as missing rather than inventing
-values. Sector indices are only published for the latest session, so they are
-archived for that session only; `nepse_indices()` therefore covers fewer dates
-than `nepse_prices()`.
+values. The index-history table begins at different dates for different
+series. The main NEPSE series is available from 2010, while newer sector
+indices begin later. The historical table does not publish 52-week high and
+low fields, so those columns are missing rather than reconstructed.
 
 Every price row also carries `source_url`, `retrieved_at`, `source_sha256`,
 `archive_path`, `archive_updated_at`, and `parser_version`.
@@ -97,13 +99,13 @@ is convenient for plotting and for joining across heterogeneous measures.
 manifest.csv                          index with SHA-256 and date coverage
 data/prices/daily/YYYY/YYYY-MM-DD.csv  immutable snapshot per trading day
 data/prices/monthly/YYYY-MM.csv        monthly partition read by the package
-data/indices/daily|monthly/...         the same layout for sub-indices
+data/indices/monthly/YYYY-MM@HASH.csv  content-addressed index history
 data/symbols.csv                       symbol master
 ```
 
 The Actions job runs after the close on NEPSE trading days. It:
 
-1. scrapes the ShareSansar price table and sub-index table;
+1. scrapes the ShareSansar price table and the historical index endpoint;
 2. rejects the run if the expected columns moved, a row is misaligned, or the
    snapshot has too few symbols to be the whole market;
 3. writes the daily file, rebuilds the monthly partition, and updates the
@@ -115,11 +117,12 @@ The Actions job runs after the close on NEPSE trading days. It:
 If ShareSansar revises a session after it was archived, the previous content is
 kept as `YYYY-MM-DD@<hash8>.csv` and only one version is marked `current`.
 
-Historical sessions can be back-filled through the same workflow. ShareSansar's
-date filter is an AJAX endpoint that returns the table without the 120-day and
-180-day columns and without sub-indices, so those fields are recorded as
-missing for back-filled days. Each day is validated and appended to the same
-monthly partition.
+Historical share-price sessions can be back-filled through the same workflow.
+ShareSansar's price date filter omits the 120-day and 180-day columns, so those
+fields are recorded as missing. Index history is fetched separately from the
+publisher's index-history table, validated series by series, and stored in
+content-addressed monthly partitions. Scheduled runs re-fetch the latest 45
+days so late publisher revisions are preserved as a new partition version.
 
 ## Live mode
 
@@ -154,6 +157,9 @@ archive.
   in either fails instead of silently dropping columns.
 - Units are preserved: prices in NPR per share, volume in shares as published,
   turnover in NPR, transactions as a count, index levels in points.
+- A small number of historical index rows are published with `high < low`.
+  The archive preserves those values unchanged, sets `ohlc_consistent = FALSE`,
+  and explains the issue in `source_note`; it does not silently swap them.
 
 ## Data source and attribution
 
@@ -169,6 +175,7 @@ testthat::test_local()
 
 # Archive one session locally, then verify it end to end
 Rscript data-raw/update-archive.R archive
+Rscript data-raw/backfill-indices.R archive 2010-01-01
 Rscript data-raw/verify-archive.R archive
 ```
 

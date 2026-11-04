@@ -15,7 +15,9 @@ case-insensitively. Use \code{\link[=nepse_indices]{nepse_indices()}} without \c
 \item{refresh}{If \code{TRUE}, re-read the archive manifest before answering.}
 }
 \value{
-A tibble of daily sub-index levels.
+A tibble of daily index levels. \code{ohlc_consistent} flags whether the
+published high is at least the published low; \code{source_note} explains any
+publisher anomaly while preserving the original values.
 }
 \description{
 Retrieve archived sector sub-index levels

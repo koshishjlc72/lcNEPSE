@@ -229,6 +229,115 @@ archive_symbols <- function(target, manifest, prices) {
   list(manifest = manifest, changed = TRUE)
 }
 
+# Historical index partitions --------------------------------------------
+
+archive_index_history_month <- function(target, manifest, month, incoming,
+                                        parser_version = "indices-1.0.0") {
+  incoming <- as.data.frame(incoming, stringsAsFactors = FALSE)
+  incoming$trading_date <- format(as.Date(incoming$trading_date), "%Y-%m-%d")
+  incoming[] <- lapply(incoming, as.character)
+  current <- manifest[
+    manifest$dataset_id == "indices" & manifest$partition == month &
+      manifest$current == "true",
+    , drop = FALSE
+  ]
+  existing <- if (nrow(current) == 1L &&
+                  file.exists(file.path(target, current$path[[1L]]))) {
+    archive_read_partition(target, current$path[[1L]])
+  } else {
+    NULL
+  }
+  if (!is.null(existing)) {
+    if (!"ohlc_consistent" %in% names(existing)) {
+      old_high <- suppressWarnings(as.numeric(existing$high))
+      old_low <- suppressWarnings(as.numeric(existing$low))
+      if (any(is.na(old_high) != !nzchar(existing$high)) ||
+          any(is.na(old_low) != !nzchar(existing$low))) {
+        stop("Existing index partition contains an unparseable high or low value.")
+      }
+      existing$ohlc_consistent <- is.na(old_high) | is.na(old_low) | old_high >= old_low
+    }
+    if (!"source_note" %in% names(existing)) {
+      existing$source_note <- ifelse(
+        tolower(existing$ohlc_consistent) == "true", "",
+        "Publisher reports high below low; original values preserved unchanged."
+      )
+    }
+    missing <- setdiff(names(incoming), names(existing))
+    if (length(missing)) {
+      stop(sprintf(
+        "Existing index partition is missing unsupported columns: %s",
+        paste(missing, collapse = ", ")
+      ))
+    }
+    existing <- existing[, names(incoming), drop = FALSE]
+
+    # A later fetch of unchanged published values is not a data revision.
+    # Retain the first query URL and retrieval timestamp for byte-stable
+    # partitions; replace provenance only when a published value changes.
+    incoming_key <- paste(incoming$trading_date, incoming$index_name, sep = "\r")
+    existing_key <- paste(existing$trading_date, existing$index_name, sep = "\r")
+    matched <- match(incoming_key, existing_key)
+    compare_fields <- setdiff(names(incoming), c("source_url", "retrieved_at"))
+    for (i in which(!is.na(matched))) {
+      j <- matched[[i]]
+      same <- all(vapply(compare_fields, function(field) {
+        identical(incoming[[field]][[i]], existing[[field]][[j]])
+      }, logical(1)))
+      if (same) {
+        incoming$source_url[[i]] <- existing$source_url[[j]]
+        incoming$retrieved_at[[i]] <- existing$retrieved_at[[j]]
+      }
+    }
+  }
+  combined <- if (is.null(existing)) incoming else rbind(existing, incoming)
+  key <- paste(combined$trading_date, combined$index_name, sep = "\r")
+  combined <- combined[!duplicated(key, fromLast = TRUE), , drop = FALSE]
+  combined <- combined[
+    order(combined$trading_date, combined$index_name, na.last = TRUE),
+    , drop = FALSE
+  ]
+  sha <- archive_csv_hash(combined)
+  if (nrow(current) == 1L && identical(current$sha256[[1L]], sha)) {
+    return(list(manifest = manifest, changed = FALSE))
+  }
+
+  # Historical responses can be revised by the publisher. Use a
+  # content-addressed path so every previously published monthly file remains
+  # available while exactly one version is marked current in the manifest.
+  rel <- sprintf(
+    "data/indices/monthly/%s@%s.csv", month, substr(sha, 1L, 12L)
+  )
+  written <- archive_put_csv(target, rel, combined)
+  first <- min(as.Date(combined$trading_date))
+  last <- max(as.Date(combined$trading_date))
+  manifest <- archive_drop_path(manifest, rel)
+  manifest <- rbind(manifest, archive_row(
+    "indices", month, rel, nrow(combined), written$sha256, first, last,
+    source_url = "https://www.sharesansar.com/index-history-data",
+    parser_version = parser_version
+  ))
+  manifest <- archive_set_current(manifest, "indices", month, rel)
+  list(manifest = manifest, changed = TRUE)
+}
+
+archive_indices_history <- function(target, manifest, indices,
+                                    parser_version = "indices-1.0.0") {
+  if (!nrow(indices)) return(list(manifest = manifest, changed = FALSE))
+  nepse_validate_indices(indices, error = TRUE)
+  months <- sort(unique(format(indices$trading_date, "%Y-%m")))
+  changed <- FALSE
+  for (month in months) {
+    part <- indices[format(indices$trading_date, "%Y-%m") == month, , drop = FALSE]
+    step <- archive_index_history_month(
+      target, manifest, month, part, parser_version = parser_version
+    )
+    manifest <- step$manifest
+    changed <- changed || step$changed
+  }
+  list(manifest = manifest, changed = changed)
+}
+
 # Top-level update ---------------------------------------------------------
 
 archive_update <- function(target, date = NULL, datasets = c("prices", "indices")) {
@@ -266,33 +375,23 @@ archive_update <- function(target, date = NULL, datasets = c("prices", "indices"
   }
 
   if ("indices" %in% datasets) {
-    indices <- nepse_scrape_indices()
-    nepse_validate_indices(indices, error = TRUE, min_rows = 5L)
-    index_day <- unique(indices$trading_date)
-    if (!is.null(date) && !identical(index_day, as.Date(date))) {
+    index_start <- if (is.null(date)) Sys.Date() - 45L else as.Date(date)
+    index_end <- if (is.null(date)) Sys.Date() else as.Date(date)
+    indices <- nepse_scrape_index_history(start = index_start, end = index_end)
+    if (!nrow(indices)) {
       message(sprintf(
-        "indices: skipping; the site only exposes the latest session (%s), not %s",
-        format(index_day, "%Y-%m-%d"), format(as.Date(date), "%Y-%m-%d")
+        "indices: no published observations from %s through %s",
+        format(index_start, "%Y-%m-%d"), format(index_end, "%Y-%m-%d")
       ))
     } else {
-      step <- archive_day(
-        target, manifest, "indices", indices, "indices-1.0.0",
-        c("trading_date", "index_name")
-      )
+      step <- archive_indices_history(target, manifest, indices)
       manifest <- step$manifest
       changed <- changed || step$changed
-      if (step$changed) {
-        month <- format(index_day, "%Y-%m")
-        monthly <- archive_month(
-          target, manifest, "indices", month, "indices-1.0.0",
-          c("trading_date", "index_name")
-        )
-        manifest <- monthly$manifest
-        changed <- changed || monthly$changed
-      }
       message(sprintf(
-        "indices: %s rows for %s (%s)", nrow(indices),
-        format(index_day, "%Y-%m-%d"),
+        "indices: %s rows across %s series from %s through %s (%s)",
+        nrow(indices), length(unique(indices$index_name)),
+        format(min(indices$trading_date), "%Y-%m-%d"),
+        format(max(indices$trading_date), "%Y-%m-%d"),
         if (step$changed) "archived" else "already current"
       ))
     }

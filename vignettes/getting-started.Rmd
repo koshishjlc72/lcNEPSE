@@ -16,7 +16,7 @@ library(lcNEPSE)
 ```
 
 `lcNEPSE` reads a dated, hash-verified archive of Nepalese share prices and
-sector indices published by ShareSansar. The archive is refreshed by GitHub
+historical NEPSE/index/sub-index series published by ShareSansar. The archive is refreshed by GitHub
 Actions; the package itself only reads it.
 
 ## What is available

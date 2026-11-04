@@ -158,6 +158,81 @@ test_that("the sub-index table is parsed", {
   expect_equal(names(pos), names(nepse_indices_source_labels()))
 })
 
+test_that("the historical index JSON is parsed without invented fields", {
+  text <- paste(readLines(fixture_path("index-history.json"), warn = FALSE), collapse = "\n")
+  out <- nepse_parse_index_history_response(
+    text = text,
+    index_id = "12",
+    index_name = "NEPSE Index",
+    source_url = paste0(nepse_index_history_url(), "?index_id=12"),
+    retrieved_at = "2026-11-04T07:00:00Z"
+  )
+  expect_equal(nrow(out), 2L)
+  expect_equal(out$trading_date, as.Date(c("2026-11-03", "2026-11-02")))
+  expect_equal(out$close, c(2664.13, 2657.51))
+  expect_equal(out$point_change, c(6.62, -2.49))
+  expect_equal(out$pct_change, c(0.24, -0.10))
+  expect_true(all(is.na(out$high_52w)))
+  expect_true(all(is.na(out$low_52w)))
+  expect_true(all(out$ohlc_consistent))
+  expect_true(all(out$source_note == ""))
+  expect_silent(nepse_validate_indices(out))
+})
+
+test_that("published OHLC anomalies are preserved and explicitly flagged", {
+  text <- paste(readLines(fixture_path("index-history.json"), warn = FALSE), collapse = "\n")
+  anomalous <- sub('"high": "2668.40"', '"high": "2600.00"', text, fixed = TRUE)
+  out <- nepse_parse_index_history_response(
+    anomalous, "12", "NEPSE Index", nepse_index_history_url(),
+    "2026-11-04T07:00:00Z"
+  )
+  expect_equal(out$high[[1L]], 2600)
+  expect_equal(out$low[[1L]], 2635.2)
+  expect_false(out$ohlc_consistent[[1L]])
+  expect_match(out$source_note[[1L]], "original values preserved")
+  expect_silent(nepse_validate_indices(out))
+})
+
+test_that("a partial historical index response is rejected", {
+  text <- paste(readLines(fixture_path("index-history.json"), warn = FALSE), collapse = "\n")
+  partial <- sub('"recordsFiltered": 2', '"recordsFiltered": 3', text, fixed = TRUE)
+  expect_error(
+    nepse_parse_index_history_response(
+      partial, "12", "NEPSE Index", nepse_index_history_url(),
+      "2026-11-04T07:00:00Z"
+    ),
+    "refusing a partial response"
+  )
+})
+
+test_that("the index-history catalog requires the core series", {
+  html <- paste0(
+    '<select id="index">',
+    '<option value="12">NEPSE Index</option>',
+    '<option value="16">Sensitive Index</option>',
+    '<option value="4">Float Index</option>',
+    '<option value="1">Banking SubIndex</option>',
+    '</select>'
+  )
+  out <- nepse_index_history_catalog(xml2::read_html(html))
+  expect_equal(out$index_id, c("12", "16", "4", "1"))
+  broken <- sub("Banking SubIndex", "Banking", html, fixed = TRUE)
+  expect_error(
+    nepse_index_history_catalog(xml2::read_html(broken)),
+    "missing required series"
+  )
+})
+
+test_that("the history request asks for every row in the selected range", {
+  query <- nepse_index_history_query(
+    "12", as.Date("2010-01-01"), as.Date("2026-11-04")
+  )
+  expect_match(query, "index_id=12", fixed = TRUE)
+  expect_match(query, "from=2010-01-01", fixed = TRUE)
+  expect_match(query, "to=2026-11-04", fixed = TRUE)
+  expect_match(query, "length=-1", fixed = TRUE)
+})
+
 test_that("a missing table is reported clearly", {
   doc <- xml2::read_html("<html><body><table><tr><th>Date</th><th>News</th></tr></table></body></html>")
   expect_null(nepse_find_table(doc, nepse_prices_source_labels()))

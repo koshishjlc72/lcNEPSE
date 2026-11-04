@@ -1,0 +1,32 @@
+{
+  "draw": 1,
+  "recordsTotal": 2,
+  "recordsFiltered": 2,
+  "data": [
+    {
+      "index_id": 12,
+      "open": "2640.10",
+      "high": "2668.40",
+      "low": "2635.20",
+      "current": "2664.13",
+      "per_change": "0.24",
+      "change_": "6.62",
+      "turnover": "5651142523.49",
+      "published_date": "2026-11-03",
+      "DT_Row_Index": 1
+    },
+    {
+      "index_id": 12,
+      "open": "2650.00",
+      "high": "2660.00",
+      "low": "2640.00",
+      "current": "2657.51",
+      "per_change": "-0.10",
+      "change_": "-2.49",
+      "turnover": "4900000000.00",
+      "published_date": "2026-11-02",
+      "DT_Row_Index": 2
+    }
+  ],
+  "disableOrdering": false
+}

@@ -63,6 +63,17 @@ nepse_parse_percent <- function(x, field) {
   nepse_parse_number(raw, field)
 }
 
+nepse_parse_logical <- function(x, field) {
+  raw <- tolower(trimws(as.character(x)))
+  out <- rep(NA, length(raw))
+  out[raw == "true"] <- TRUE
+  out[raw == "false"] <- FALSE
+  if (anyNA(out)) {
+    nepse_stop("Field `%s` contains a missing or invalid logical value.", field)
+  }
+  out
+}
+
 nepse_parse_date <- function(x, field, allow_na = FALSE) {
   x <- trimws(as.character(x))
   out <- as.Date(x)

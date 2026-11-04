@@ -38,7 +38,8 @@ stub_price_day <- function(day = as.Date("2026-10-30"), n = 25L, shift = 0) {
   )
 }
 
-stub_index_day <- function(day = as.Date("2026-10-30"), n = 6L) {
+stub_index_day <- function(day = as.Date("2026-10-30"), n = 6L,
+                           retrieved_at = "2026-10-30T10:00:00Z") {
   i <- seq_len(n)
   tibble::tibble(
     trading_date = as.Date(rep(day, n)),
@@ -52,8 +53,10 @@ stub_index_day <- function(day = as.Date("2026-10-30"), n = 6L) {
     pct_change = 0.5,
     high_52w = 1200 + i,
     low_52w = 800 + i,
+    ohlc_consistent = TRUE,
+    source_note = "",
     source_url = "https://www.sharesansar.com/",
-    retrieved_at = "2026-10-30T10:00:00Z"
+    retrieved_at = retrieved_at
   )
 }
 
@@ -65,14 +68,17 @@ test_that("the archiver writes a complete archive readable by the package", {
   cache <- withr::local_tempdir()
   source(lib, local = TRUE)
   nepse_scrape_prices <- function(date = NULL) stub_price_day()
-  nepse_scrape_indices <- function() stub_index_day()
+  nepse_scrape_index_history <- function(index = NULL, start, end) stub_index_day()
 
   expect_true(archive_update(target))
   expect_true(file.exists(file.path(target, "manifest.csv")))
   expect_true(file.exists(file.path(target, "data", "prices", "daily", "2026", "2026-10-30.csv")))
   expect_true(file.exists(file.path(target, "data", "prices", "monthly", "2026-10.csv")))
   expect_true(file.exists(file.path(target, "data", "symbols.csv")))
-  expect_true(file.exists(file.path(target, "data", "indices", "monthly", "2026-10.csv")))
+  expect_length(
+    list.files(file.path(target, "data", "indices", "monthly"), pattern = "^2026-10@.*\\.csv$"),
+    1L
+  )
 
   withr::local_options(
     lcNEPSE.mirror_dir = target,
@@ -103,10 +109,13 @@ test_that("re-archiving an unchanged day writes nothing", {
   target <- withr::local_tempdir()
   source(lib, local = TRUE)
   nepse_scrape_prices <- function(date = NULL) stub_price_day()
-  nepse_scrape_indices <- function() stub_index_day()
+  nepse_scrape_index_history <- function(index = NULL, start, end) stub_index_day()
 
   expect_true(archive_update(target))
   manifest_before <- readLines(file.path(target, "manifest.csv"))
+  nepse_scrape_index_history <- function(index = NULL, start, end) {
+    stub_index_day(retrieved_at = "2026-10-31T10:00:00Z")
+  }
   expect_false(archive_update(target))
   expect_equal(readLines(file.path(target, "manifest.csv")), manifest_before)
 })
@@ -119,7 +128,7 @@ test_that("a revised day keeps the previous content as a versioned file", {
   cache <- withr::local_tempdir()
   source(lib, local = TRUE)
   nepse_scrape_prices <- function(date = NULL) stub_price_day()
-  nepse_scrape_indices <- function() stub_index_day()
+  nepse_scrape_index_history <- function(index = NULL, start, end) stub_index_day()
   archive_update(target)
 
   nepse_scrape_prices <- function(date = NULL) stub_price_day(shift = 7)
@@ -146,11 +155,13 @@ test_that("a second trading day extends the monthly partition", {
   target <- withr::local_tempdir()
   source(lib, local = TRUE)
   nepse_scrape_prices <- function(date = NULL) stub_price_day()
-  nepse_scrape_indices <- function() stub_index_day()
+  nepse_scrape_index_history <- function(index = NULL, start, end) stub_index_day()
   archive_update(target)
 
   nepse_scrape_prices <- function(date = NULL) stub_price_day(day = as.Date("2026-10-29"))
-  nepse_scrape_indices <- function() stub_index_day(day = as.Date("2026-10-29"))
+  nepse_scrape_index_history <- function(index = NULL, start, end) {
+    stub_index_day(day = as.Date("2026-10-29"))
+  }
   archive_update(target)
 
   monthly <- utils::read.csv(file.path(target, "data", "prices", "monthly", "2026-10.csv"))

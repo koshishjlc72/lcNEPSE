@@ -23,6 +23,7 @@ Imports:
     curl,
     digest,
     dplyr,
+    jsonlite,
     stringr,
     tibble,
     xml2

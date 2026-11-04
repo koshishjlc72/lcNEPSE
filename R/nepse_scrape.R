@@ -14,6 +14,204 @@ nepse_indices_url <- function() {
   "https://www.sharesansar.com/"
 }
 
+nepse_index_history_url <- function() {
+  "https://www.sharesansar.com/index-history-data"
+}
+
+nepse_index_history_catalog <- function(doc) {
+  options <- xml2::xml_find_all(doc, "//select[@id='index']/option[@value]")
+  if (!length(options)) {
+    nepse_stop(
+      "ShareSansar's index-history page has no index selector; the page layout may have changed."
+    )
+  }
+  out <- tibble::tibble(
+    index_id = nepse_clean_text(xml2::xml_attr(options, "value")),
+    index_name = nepse_clean_text(xml2::xml_text(options))
+  )
+  if (any(!grepl("^[0-9]+$", out$index_id)) ||
+      any(!nzchar(out$index_name)) ||
+      anyDuplicated(out$index_id) || anyDuplicated(out$index_name)) {
+    nepse_stop("ShareSansar returned an invalid or ambiguous index-history catalog.")
+  }
+  required <- c("NEPSE Index", "Sensitive Index", "Float Index", "Banking SubIndex")
+  missing <- setdiff(required, out$index_name)
+  if (length(missing)) {
+    nepse_stop(
+      "ShareSansar's index-history catalog is missing required series: %s.",
+      paste(missing, collapse = ", ")
+    )
+  }
+  out
+}
+
+nepse_index_history_query <- function(index_id, start, end) {
+  values <- c(
+    index_id = index_id,
+    from = format(start, "%Y-%m-%d"),
+    to = format(end, "%Y-%m-%d"),
+    draw = "1", start = "0", length = "-1"
+  )
+  query <- paste(
+    paste0(
+      utils::URLencode(names(values), reserved = TRUE), "=",
+      utils::URLencode(values, reserved = TRUE)
+    ),
+    collapse = "&"
+  )
+  paste0(nepse_index_history_url(), "?", query)
+}
+
+nepse_parse_index_history_response <- function(text, index_id, index_name,
+                                               source_url, retrieved_at) {
+  payload <- tryCatch(
+    jsonlite::fromJSON(text, simplifyDataFrame = TRUE),
+    error = function(e) {
+      nepse_stop(
+        "ShareSansar returned invalid JSON for index `%s`: %s",
+        index_name, conditionMessage(e)
+      )
+    }
+  )
+  required_top <- c("recordsTotal", "recordsFiltered", "data")
+  if (!is.list(payload) || !all(required_top %in% names(payload))) {
+    nepse_stop(
+      "ShareSansar's index-history response for `%s` is missing required fields.",
+      index_name
+    )
+  }
+  if (is.null(payload$data) || !length(payload$data)) {
+    return(tibble::tibble(
+      trading_date = as.Date(character()), index_name = character(),
+      open = numeric(), high = numeric(), low = numeric(), close = numeric(),
+      turnover = numeric(), point_change = numeric(), pct_change = numeric(),
+      high_52w = numeric(), low_52w = numeric(), ohlc_consistent = logical(),
+      source_note = character(), source_url = character(), retrieved_at = character()
+    ))
+  }
+  data <- payload$data
+  required <- c(
+    "index_id", "open", "high", "low", "current", "change_",
+    "per_change", "turnover", "published_date"
+  )
+  if (!is.data.frame(data) || !all(required %in% names(data))) {
+    nepse_stop(
+      "ShareSansar's index-history rows for `%s` are missing required fields.",
+      index_name
+    )
+  }
+  total <- suppressWarnings(as.integer(payload$recordsFiltered[[1L]]))
+  if (is.na(total) || total != nrow(data)) {
+    nepse_stop(
+      "ShareSansar reported %s filtered index-history rows for `%s` but returned %d; refusing a partial response.",
+      as.character(payload$recordsFiltered[[1L]]), index_name, nrow(data)
+    )
+  }
+  returned_ids <- as.character(data$index_id)
+  if (anyNA(returned_ids) || any(returned_ids != as.character(index_id))) {
+    nepse_stop(
+      "ShareSansar returned rows for a different index while `%s` was requested.",
+      index_name
+    )
+  }
+  high <- nepse_parse_number(data$high, "high")
+  low <- nepse_parse_number(data$low, "low")
+  consistent <- is.na(high) | is.na(low) | high >= low
+  out <- tibble::tibble(
+    trading_date = nepse_parse_date(data$published_date, "published_date"),
+    index_name = rep(index_name, nrow(data)),
+    open = nepse_parse_number(data$open, "open"),
+    high = high,
+    low = low,
+    close = nepse_parse_number(data$current, "current"),
+    turnover = nepse_parse_number(data$turnover, "turnover"),
+    point_change = nepse_parse_number(data$change_, "change_"),
+    pct_change = nepse_parse_percent(data$per_change, "per_change"),
+    high_52w = rep(NA_real_, nrow(data)),
+    low_52w = rep(NA_real_, nrow(data)),
+    ohlc_consistent = consistent,
+    source_note = ifelse(
+      consistent, "",
+      "Publisher reports high below low; original values preserved unchanged."
+    ),
+    source_url = rep(source_url, nrow(data)),
+    retrieved_at = rep(retrieved_at, nrow(data))
+  )
+  if (anyDuplicated(out$trading_date)) {
+    nepse_stop("ShareSansar returned duplicate dates for index `%s`.", index_name)
+  }
+  out
+}
+
+#' Scrape historical NEPSE index and sector sub-index data
+#'
+#' Reads the historical index table published by ShareSansar. The page exposes
+#' the NEPSE, Sensitive, Float, Sensitive Float, and sector/sub-index series.
+#' Each returned row retains the exact query URL and retrieval timestamp. The
+#' history table does not publish 52-week bounds, so `high_52w` and `low_52w`
+#' are returned as missing instead of being reconstructed.
+#'
+#' @param index Optional character vector of published index names. `NULL`
+#'   retrieves every series in the source page's index selector.
+#' @param start,end Inclusive `Date` or ISO date range. The default starts at
+#'   2010-01-01, the beginning of the available NEPSE series at time of
+#'   implementation, and ends today.
+#' @return A tibble of daily index observations with `source_url` and
+#'   `retrieved_at`.
+#' @export
+nepse_scrape_index_history <- function(index = NULL,
+                                       start = as.Date("2010-01-01"),
+                                       end = Sys.Date()) {
+  start <- nepse_parse_date_arg(start, "start")
+  end <- nepse_parse_date_arg(end, "end")
+  if (is.null(start) || is.null(end) || start > end) {
+    nepse_stop("`start` and `end` must define a valid inclusive date range.")
+  }
+  page_url <- nepse_index_history_url()
+  page <- nepse_http_get_text(page_url)
+  catalog <- nepse_index_history_catalog(xml2::read_html(page))
+  if (!is.null(index)) {
+    if (!is.character(index) || !length(index) || anyNA(index)) {
+      nepse_stop("`index` must be a non-empty character vector.")
+    }
+    wanted <- tolower(trimws(index))
+    matched <- match(wanted, tolower(catalog$index_name))
+    if (anyNA(matched)) {
+      nepse_stop(
+        "Unknown index name(s): %s. Available: %s",
+        paste(index[is.na(matched)], collapse = ", "),
+        paste(catalog$index_name, collapse = ", ")
+      )
+    }
+    catalog <- catalog[matched, , drop = FALSE]
+  }
+
+  rows <- lapply(seq_len(nrow(catalog)), function(i) {
+    query <- nepse_index_history_query(catalog$index_id[[i]], start, end)
+    handle <- nepse_new_handle(referer = page_url)
+    curl::handle_setopt(
+      handle,
+      httpheader = c(
+        "X-Requested-With: XMLHttpRequest",
+        "Accept: application/json, text/javascript, */*; q=0.01"
+      )
+    )
+    text <- nepse_http_get_text(query, handle = handle)
+    nepse_parse_index_history_response(
+      text = text,
+      index_id = catalog$index_id[[i]],
+      index_name = catalog$index_name[[i]],
+      source_url = query,
+      retrieved_at = nepse_now_utc()
+    )
+  })
+  out <- nepse_bind(rows)
+  if (!nrow(out)) return(out)
+  out <- out[order(out$trading_date, out$index_name), , drop = FALSE]
+  nepse_validate_indices(out, error = TRUE)
+  tibble::as_tibble(out)
+}
+
 nepse_normalize_label <- function(x) {
   x <- tolower(x)
   x <- gsub("%", " percent ", x, fixed = TRUE)
@@ -409,6 +607,11 @@ nepse_parse_index_table <- function(table) {
     pct_change = nepse_parse_percent(cell_text("pct_change"), "pct_change"),
     high_52w = nepse_parse_number(cell_text("high_52w"), "high_52w"),
     low_52w = nepse_parse_number(cell_text("low_52w"), "low_52w")
+  )
+  out$ohlc_consistent <- is.na(out$high) | is.na(out$low) | out$high >= out$low
+  out$source_note <- ifelse(
+    out$ohlc_consistent, "",
+    "Publisher reports high below low; original values preserved unchanged."
   )
   if (any(!nzchar(out$index_name))) nepse_stop("ShareSansar sub-index table has an empty name.")
   if (anyDuplicated(out$index_name)) nepse_stop("ShareSansar sub-index table has duplicate names.")

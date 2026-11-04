@@ -105,7 +105,9 @@ nepse_prices <- function(symbol = NULL, start = NULL, end = NULL,
 #'   case-insensitively. Use [nepse_indices()] without `index` to see names.
 #' @param start,end Optional ISO dates or `Date` values.
 #' @param refresh If `TRUE`, re-read the archive manifest before answering.
-#' @return A tibble of daily sub-index levels.
+#' @return A tibble of daily index levels. `ohlc_consistent` flags whether the
+#'   published high is at least the published low; `source_note` explains any
+#'   publisher anomaly while preserving the original values.
 #' @export
 nepse_indices <- function(index = NULL, start = NULL, end = NULL,
                           refresh = FALSE) {

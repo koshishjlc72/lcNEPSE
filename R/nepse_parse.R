@@ -10,7 +10,8 @@ nepse_prices_columns <- function() {
 nepse_indices_columns <- function() {
   c(
     "trading_date", "index_name", "open", "high", "low", "close", "turnover",
-    "point_change", "pct_change", "high_52w", "low_52w"
+    "point_change", "pct_change", "high_52w", "low_52w",
+    "ohlc_consistent", "source_note"
   )
 }
 
@@ -93,7 +94,9 @@ nepse_parse_indices_archive <- function(path, row) {
     point_change = nepse_parse_number(data$point_change, "point_change"),
     pct_change = nepse_parse_percent(data$pct_change, "pct_change"),
     high_52w = nepse_parse_number(data$high_52w, "high_52w"),
-    low_52w = nepse_parse_number(data$low_52w, "low_52w")
+    low_52w = nepse_parse_number(data$low_52w, "low_52w"),
+    ohlc_consistent = nepse_parse_logical(data$ohlc_consistent, "ohlc_consistent"),
+    source_note = nepse_clean_text(data$source_note)
   )
   out$source_url <- nepse_clean_text(data$source_url)
   out$retrieved_at <- nepse_clean_text(data$retrieved_at)

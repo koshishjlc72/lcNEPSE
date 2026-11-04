@@ -10,15 +10,14 @@ a scheduled GitHub Actions job and should not be edited by hand.
 manifest.csv                     index of every file, with SHA-256 and date coverage
 data/prices/daily/YYYY/YYYY-MM-DD.csv      one immutable snapshot per trading day
 data/prices/monthly/YYYY-MM.csv            monthly partition assembled from the daily files
-data/indices/daily/YYYY/YYYY-MM-DD.csv     one snapshot of the published sub-indices
-data/indices/monthly/YYYY-MM.csv           monthly sub-index partition
+data/indices/monthly/YYYY-MM@HASH.csv      content-addressed index-history partition
 data/symbols.csv                           symbol and company-name master
 ```
 
 `data/prices/monthly/*` and `data/indices/monthly/*` are the files the R
-package reads; the daily files are the provenance layer. If ShareSansar
-revises a day after it was archived, the previous content is kept as
-`YYYY-MM-DD@<hash8>.csv` and the manifest marks only one version `current`.
+package reads. Daily price files are the price provenance layer. Historical
+index partitions are content-addressed; when ShareSansar revises history, the
+old monthly file remains and the manifest marks only one version `current`.
 
 ## Manifest columns
 
